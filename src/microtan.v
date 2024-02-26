@@ -51,7 +51,7 @@ module microtan
 
    reg         key_int = 1'b0;
    reg [4:0]   key_col = 5'b0;
-   wire [7:0]  key_row;
+   wire [6:0]  key_row;
    reg         graphics = 1'b0;
    reg [1:0]   delayed_nmi = 2'b00;
 
@@ -117,7 +117,7 @@ module microtan
    // RAM
    // ===============================================================
 
-   reg [8:0]   ram[0:1023];
+   reg [8:0]   ram[0:8191];
    reg [7:0]   ram_DO;
    wire        ram_sel = !cpu_AB[15];
 
@@ -127,15 +127,15 @@ module microtan
    always @(posedge cpu_clk)
      if (cpu_clken1) begin
         if (cpu_WE && ram_sel)
-          ram[cpu_AB[9:0]] <= { cpu_AB[9] & graphics, cpu_DO};
-        ram_DO <= ram[cpu_AB[9:0]][7:0];
+          ram[cpu_AB[12:0]] <= { cpu_AB[9] & graphics, cpu_DO};
+        ram_DO <= ram[cpu_AB[12:0]][7:0];
      end
 
    // ===============================================================
    // ROM
    // ===============================================================
 
-   reg [7:0]   rom[0:2047];
+   reg [7:0]   rom[0:16383];
    wire        rom_sel   = (cpu_AB[15:14] == 2'b11);
    reg [7:0]   rom_DO;
 
@@ -144,7 +144,7 @@ module microtan
 
    always @(posedge cpu_clk)
      if (cpu_clken1) begin
-        rom_DO <= rom[cpu_AB[10:0]];
+        rom_DO <= rom[cpu_AB[13:0]];
      end
 
    // ===============================================================
@@ -160,9 +160,12 @@ module microtan
    // I/O
    // ===============================================================
 
+   reg         keycol4_last = 1'b1;
+
    always @(posedge cpu_clk) begin
      if (cpu_clken1) begin
-        if (key_col[4])
+        keycol4_last <= key_col[4];
+        if (key_col[4] && !keycol4_last)
           key_int <= 1'b1;
         if (cpu_WE) begin
            if (bff0_sel)
@@ -259,7 +262,7 @@ module microtan
          end
       end
 
-      video_byte <= ram[{1'b1, video_addr}];
+      video_byte <= ram[{4'b0001, video_addr}];
 
       h_counter1 <= h_counter[3:0];
 
@@ -300,7 +303,7 @@ module microtan
 
    wire [7:0]  cpu_DI = ram_sel ? ram_DO :
                rom_sel ? rom_DO :
-               bff3_sel ? key_row :
+               bff3_sel ? {key_int, key_row} :
                8'hFF;
 
    wire        cpu_IRQ = key_int;

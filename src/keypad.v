@@ -44,7 +44,7 @@ module keypad
    input        ps2_clk,
    input        ps2_data,
    input [4:0]  col,
-   output [7:0] row,
+   output [6:0] row,
    output       reset_out
    );
 
@@ -147,7 +147,7 @@ module keypad
       end
    end
 
-   assign row = { 3'b000,
+   assign row = { 2'b00,
                   (col[0] ? {keys[16], keys[12], keys[ 8], keys[ 4], keys [0]} : 5'b00000) |
                   (col[1] ? {keys[17], keys[13], keys[ 9], keys[ 5], keys [1]} : 5'b00000) |
                   (col[2] ? {keys[18], keys[14], keys[10], keys[ 6], keys [2]} : 5'b00000) |
