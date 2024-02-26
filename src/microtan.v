@@ -30,7 +30,8 @@ module microtan
    output reg    vga_hs,
    output reg    vga_r,
    output reg    vga_g,
-   output reg    vga_b
+   output reg    vga_b,
+   output [4:0]  kdi
  );
 
    wire        cpu_clk;
@@ -383,6 +384,8 @@ module microtan
 
    assign trace = {trace_phi2, trace_sync, trace_rnw, trace_data};
 
-   assign led = {key_row};
+   assign led = {key_row[3:0], key_col[3:0]};
+
+   assign kdi = {key_col};
 
 endmodule
