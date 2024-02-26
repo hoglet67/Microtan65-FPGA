@@ -286,7 +286,7 @@ module microtan
       end // else: !if(video_byte[8])
       vga_hs <= !h_sync;
       vga_vs <= !v_sync;
-      if (v_counter >= 16 && v_counter < 16 + 480 && h_counter >= 64 + 3 && h_counter < 64 + 512 + 3) begin
+      if (v_counter >= 16 && v_counter < 16 + 448 && h_counter >= 64 + 2 && h_counter < 64 + 512 + 2) begin
         vga_r <= video_bit;
         vga_g <= video_bit;
         vga_b <= video_bit;
