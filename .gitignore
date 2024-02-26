@@ -1,0 +1,9 @@
+#*
+*~
+a.out
+simulate/dump.vcd
+xilinx/iseconfig/
+xilinx/working/
+xilinx/*_bd.bmm
+not_in_git/
+build/
