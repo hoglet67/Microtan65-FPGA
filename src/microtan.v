@@ -25,6 +25,7 @@ module microtan
    output [7:0]  led,
    input         ps2_clk,
    input         ps2_data,
+   input         dip1,
    output [10:0] trace,
    output reg    vga_vs,
    output reg    vga_hs,
@@ -49,7 +50,9 @@ module microtan
    reg         cpu_clken = 1'b0;
    reg         cpu_clken1 = 1'b0;
 
-   reg         key_int = 1'b0;
+   wire        key_int;
+   reg         key_int_last;
+   reg         key_int_flag = 1'b0;
    reg [4:0]   key_col = 5'b0;
    wire [6:0]  key_row;
    reg         graphics = 1'b0;
@@ -164,12 +167,12 @@ module microtan
 
    always @(posedge cpu_clk) begin
      if (cpu_clken1) begin
-        keycol4_last <= key_col[4];
-        if (key_col[4] && !keycol4_last)
-          key_int <= 1'b1;
+        key_int_last <= key_int;
+        if (key_int && !key_int_last)
+          key_int_flag <= 1'b1;
         if (cpu_WE) begin
            if (bff0_sel)
-             key_int <= 1'b0;
+             key_int_flag <= 1'b0;
            if (bff1_sel)
              delayed_nmi <= 2'b11;
            if (bff2_sel)
@@ -191,8 +194,10 @@ module microtan
       .reset(cpu_reset),
       .ps2_clk(ps2_clk),
       .ps2_data(ps2_data),
+      .keypad_mode(dip1),
       .col(key_col),
       .row(key_row),
+      .key_int(key_int),
 		.reset_out(reset_out)
       );
 
@@ -303,10 +308,10 @@ module microtan
 
    wire [7:0]  cpu_DI = ram_sel ? ram_DO :
                rom_sel ? rom_DO :
-               bff3_sel ? {key_int, key_row} :
+               bff3_sel ? {key_int_flag, key_row} :
                8'hFF;
 
-   wire        cpu_IRQ = key_int;
+   wire        cpu_IRQ = key_int_flag;
    wire        cpu_NMI = (delayed_nmi == 2'b01);
 
 `ifdef USE_T65
