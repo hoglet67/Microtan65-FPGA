@@ -135,10 +135,10 @@ module keypad
                  8'h 23: keys[13] <= ~_release_;    //  D
                  8'h 24: keys[14] <= ~_release_;    //  E
                  8'h 2B: keys[15] <= ~_release_;    //  F
-//                 8'h 12: keys[16] <= ~_release_;    //  Shift (Left Shift)
-//                 8'h 59: keys[16] <= ~_release_;    //  Shift (Right Shift)
-//                 8'h 72: keys[17] <= ~_release_;    //  LF (Down Arrow)
-//                 8'h 5A: keys[18] <= ~_release_;    //  CR (Return)
+                 8'h 12: keys[16] <= ~_release_;    //  Shift (Left Shift)
+                 8'h 59: keys[16] <= ~_release_;    //  Shift (Right Shift)
+                 8'h 72: keys[17] <= ~_release_;    //  LF (Down Arrow)
+                 8'h 5A: keys[18] <= ~_release_;    //  CR (Return)
                  8'h 07: keys[19] <= ~_release_;    //  Reset (F12)
 
                endcase
@@ -148,10 +148,10 @@ module keypad
    end
 
    assign row = { 3'b000,
-                  (col[0] ? 5'b00000 : {keys[16], keys[12], keys[ 8], keys[ 4], keys [0]}) |
-                  (col[1] ? 5'b00000 : {keys[17], keys[13], keys[ 9], keys[ 5], keys [1]}) |
-                  (col[2] ? 5'b00000 : {keys[18], keys[14], keys[10], keys[ 6], keys [2]}) |
-                  (col[3] ? 5'b00000 : {    1'b0, keys[15], keys[11], keys[ 7], keys [3]})};
+                  (col[0] ? {keys[16], keys[12], keys[ 8], keys[ 4], keys [0]} : 5'b00000) |
+                  (col[1] ? {keys[17], keys[13], keys[ 9], keys[ 5], keys [1]} : 5'b00000) |
+                  (col[2] ? {keys[18], keys[14], keys[10], keys[ 6], keys [2]} : 5'b00000) |
+                  (col[3] ? {    1'b0, keys[15], keys[11], keys[ 7], keys [3]} : 5'b00000)};
 
    assign reset_out = keys[19];
 
