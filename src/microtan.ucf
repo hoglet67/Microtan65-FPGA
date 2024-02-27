@@ -49,3 +49,6 @@ NET "kdi<1>"     LOC = "P105" | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 
 NET "kdi<2>"     LOC = "P102" | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;
 NET "kdi<3>"     LOC = "P100" | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;
 NET "kdi<4>"     LOC = "P98"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;
+
+# PWM Audio
+NET "pwm_audio"  LOC = "P85"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;

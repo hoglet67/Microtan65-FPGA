@@ -32,7 +32,8 @@ module microtan
    output reg    vga_r,
    output reg    vga_g,
    output reg    vga_b,
-   output [4:0]  kdi
+   output [4:0]  kdi,
+   output        pwm_audio
  );
 
    wire        cpu_clk;
@@ -58,10 +59,16 @@ module microtan
    reg         graphics = 1'b0;
    reg [1:0]   delayed_nmi = 2'b00;
 
-   wire bff0_sel = cpu_AB[15:14] == 2'b10 && cpu_AB[1:0] == 2'b00;
-   wire bff1_sel = cpu_AB[15:14] == 2'b10 && cpu_AB[1:0] == 2'b01;
-   wire bff2_sel = cpu_AB[15:14] == 2'b10 && cpu_AB[1:0] == 2'b10;
-   wire bff3_sel = cpu_AB[15:14] == 2'b10 && cpu_AB[1:0] == 2'b11;
+   wire        bff0_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b00;
+   wire        bff1_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b01;
+   wire        bff2_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b10;
+   wire        bff3_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b11;
+
+   wire        sound_sel = cpu_AB[15:4] == 12'hBC0;
+   wire [7:0]  sound_DO;
+   wire [7:0]  sound_PA;
+   wire [7:0]  sound_PB;
+   wire [9:0]  audio;
 
    // ===============================================================
    // Clock PLL: 50MHz -> 6MHz
@@ -201,6 +208,43 @@ module microtan
 		.reset_out(reset_out)
       );
 
+   // ===============================================================
+   // sound
+   // ===============================================================
+
+   jt49_bus jt49_bus
+     (
+      .rst_n(!cpu_reset),
+      .clk(cpu_clk),
+      .clk_en(cpu_clken),
+      .bdir(cpu_clken & sound_sel & !cpu_WE),
+      .bc1(cpu_clken & sound_sel & !cpu_AB[0]),
+      .din(cpu_DO),
+
+      .sel(1'b1), // if sel is low, the clock is divided by 2
+      .dout(sound_DO),
+      .sound(audio), // combined channel output
+      .A(), // linearised channel output
+      .B(),
+      .C(),
+      .sample(),
+
+      .IOA_in(8'h55),
+      .IOA_out(sound_PA),
+      .IOA_oe(),
+
+      .IOB_in(8'hAA),
+      .IOB_out(sound_PB),
+      .IOB_oe()
+      );
+
+   pwm_dac #(.WIDTH(10)) pwm_dac
+     (
+      .clk_i(clk50),
+      .reset_i(cpu_reset),
+      .dac_i(audio),
+      .dac_o(pwm_audio)
+    );
 
    // ===============================================================
    // video
@@ -309,6 +353,7 @@ module microtan
    wire [7:0]  cpu_DI = ram_sel ? ram_DO :
                rom_sel ? rom_DO :
                bff3_sel ? {key_int_flag, key_row} :
+					sound_sel ? sound_DO :
                8'hFF;
 
    wire        cpu_IRQ = key_int_flag;
@@ -392,7 +437,9 @@ module microtan
 
    assign trace = {trace_phi2, trace_sync, trace_rnw, trace_data};
 
-   assign led = {key_row[3:0], key_col[3:0]};
+//   assign led = {key_row[3:0], key_col[3:0]};
+//   assign led = sound_PA;
+   assign led = {key_int_flag, key_row};
 
    assign kdi = {key_col};
 
