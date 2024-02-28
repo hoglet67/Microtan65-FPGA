@@ -47,7 +47,8 @@ module keypad
    input [4:0]  col,
    output [6:0] row,
    output       key_int,
-   output       reset_out
+   output       reset_out,
+   output [7:0] joystick
    );
 
    //  Interface to PS/2 block
@@ -67,6 +68,12 @@ module keypad
    reg          shifted;
    reg          strobe;
 
+   reg          js_left;
+   reg          js_right;
+   reg          js_up;
+   reg          js_down;
+   reg          js_btn1;
+   reg          js_btn2;
 
    ps2_intf PS2
      (
@@ -92,6 +99,12 @@ module keypad
          shifted <= 1'b0;
          lock <= 1'b0;
 			strobe <= 1'b0;
+			js_left <= 1'b1;
+			js_right <= 1'b1;
+			js_up <= 1'b1;
+			js_down <= 1'b1;
+			js_btn1 <= 1'b1;
+			js_btn2 <= 1'b1;
 
       end else  begin
 
@@ -117,10 +130,24 @@ module keypad
                _release_ <= 1'b 0;
                extended <= 1'b 0;
 
+               case (keyb_data)
+                 8'h6B: js_left  <= _release_;  // LEFT
+                 8'h72: js_down  <= _release_;  // DOWN
+                 8'h74: js_right <= _release_;  // RIGHT
+                 8'h75: js_up    <= _release_;  // UP
+                 8'h14: js_btn2  <= _release_;  // RIGHT CTRL
+               endcase
+
             end else begin
 
                _release_ <= 1'b 0;
                extended <= 1'b 0;
+
+               case (keyb_data)
+                 8'h12: js_btn1  <= _release_;  //  Left SHIFT
+                 8'h59: js_btn1  <= _release_;  //  Right SHIFT
+                 8'h14: js_btn2  <= _release_;  //  LEFT CTRL
+               endcase
 
                //  Decode scan codes
 
@@ -258,5 +285,11 @@ module keypad
                 ascii;
 
    assign reset_out = keys[19];
+
+   // Standard Joystick Connections connected to Tanex Port A
+   assign joystick = { js_down, js_right, js_up, js_left, js_btn2, js_btn1, 2'b11 };
+
+   // Space Invasion Hardware (??)  connected to Tanex Port A
+   // assign joystick = { 2'b00, !js_btn2, !js_up, !js_down, !js_right, !js_btn1, !js_left};
 
 endmodule

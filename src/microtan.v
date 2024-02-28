@@ -59,16 +59,21 @@ module microtan
    reg         graphics = 1'b0;
    reg [1:0]   delayed_nmi = 2'b00;
 
+   wire        bfc1_sel = cpu_AB == 16'hBFC1;
+
    wire        bff0_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b00;
    wire        bff1_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b01;
    wire        bff2_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b10;
    wire        bff3_sel = cpu_AB[15:4] == 12'hBFF && cpu_AB[1:0] == 2'b11;
 
-   wire        sound_sel = cpu_AB[15:4] == 12'hBC0;
+   wire        sound_sel0 = cpu_AB == 16'hBC00;
+   wire        sound_sel1 = cpu_AB == 16'hBC01;
+   reg [3:0]   sound_addr_latch;
    wire [7:0]  sound_DO;
    wire [7:0]  sound_PA;
    wire [7:0]  sound_PB;
    wire [9:0]  audio;
+   wire [7:0]  joystick_DO;
 
    // ===============================================================
    // Clock PLL: 50MHz -> 6MHz
@@ -205,22 +210,30 @@ module microtan
       .col(key_col),
       .row(key_row),
       .key_int(key_int),
-		.reset_out(reset_out)
+		.reset_out(reset_out),
+      .joystick(joystick_DO)
       );
 
    // ===============================================================
    // sound
    // ===============================================================
 
-   jt49_bus jt49_bus
+   always @(posedge cpu_clk)
+     if (cpu_clken)
+       if (cpu_reset)
+         sound_addr_latch <= 4'b0000;
+       else if (sound_sel0 && cpu_WE && cpu_DO[7:4] == 4'b0000)
+         sound_addr_latch <= cpu_DO[3:0];
+
+   jt49 jt49
      (
       .rst_n(!cpu_reset),
       .clk(cpu_clk),
       .clk_en(cpu_clken),
-      .bdir(cpu_clken & sound_sel & !cpu_WE),
-      .bc1(cpu_clken & sound_sel & !cpu_AB[0]),
+      .addr(sound_addr_latch),
+      .cs_n(!sound_sel1),
+      .wr_n(!cpu_WE),
       .din(cpu_DO),
-
       .sel(1'b1), // if sel is low, the clock is divided by 2
       .dout(sound_DO),
       .sound(audio), // combined channel output
@@ -353,7 +366,8 @@ module microtan
    wire [7:0]  cpu_DI = ram_sel ? ram_DO :
                rom_sel ? rom_DO :
                bff3_sel ? {key_int_flag, key_row} :
-					sound_sel ? sound_DO :
+					sound_sel1 ? sound_DO :
+               bfc1_sel ? joystick_DO :
                8'hFF;
 
    wire        cpu_IRQ = key_int_flag;
