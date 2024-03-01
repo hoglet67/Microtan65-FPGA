@@ -27,15 +27,15 @@ module microtan
    input         ps2_data,
    input         dip1,
    output [10:0] trace,
-   output reg    vga_vs,
-   output reg    vga_hs,
-   output reg    vga_r,
-   output reg    vga_g,
-   output reg    vga_b,
+   output        vga_r,
+   output        vga_g,
+   output        vga_b,
+   output        vga_vs,
+   output        vga_hs,
+   output        composite_sync,
+   output        composite_video,
    output [4:0]  kdi,
-   output        pwm_audio,
-   output reg    composite_sync,
-   output reg    composite_video
+   output        pwm_audio
  );
 
    wire        cpu_clk;
@@ -134,7 +134,7 @@ module microtan
    // RAM
    // ===============================================================
 
-   reg [8:0]   ram[0:8191];
+   reg [7:0]   ram[0:8191];
    reg [7:0]   ram_DO;
    wire        ram_sel = !cpu_AB[15];
 
@@ -144,8 +144,8 @@ module microtan
    always @(posedge cpu_clk)
      if (cpu_clken1) begin
         if (cpu_WE && ram_sel)
-          ram[cpu_AB[12:0]] <= { cpu_AB[9] & graphics, cpu_DO};
-        ram_DO <= ram[cpu_AB[12:0]][7:0];
+          ram[cpu_AB[12:0]] <= cpu_DO;
+        ram_DO <= ram[cpu_AB[12:0]];
      end
 
    // ===============================================================
@@ -163,15 +163,6 @@ module microtan
      if (cpu_clken1) begin
         rom_DO <= rom[cpu_AB[13:0]];
      end
-
-   // ===============================================================
-   // Character ROM
-   // ===============================================================
-
-   reg [7:0]   char_rom[0:2047];
-
-   initial
-     $readmemh("../mem/char_rom.mem", char_rom);
 
    // ===============================================================
    // I/O
@@ -262,146 +253,80 @@ module microtan
     );
 
    // ===============================================================
-   // video
+   // VGA Video
    // ===============================================================
 
+   // 800 x 525 with a 640x480 active region and 512x488 centred within that
 
-   reg [9:0] h_counter = 10'b0;
-   reg [3:0] h_counter1 = 4'b0;
-   reg [9:0] v_counter = 10'b0;
-   reg       h_sync = 1'b0;
-   reg       v_sync = 1'b0;
+   lores_video
+     #(
+       .H_TOTAL         (800),
+       .V_TOTAL         (525),
+       .H_ACTIVE        (640),
+       .V_ACTIVE        (480),
+       .H_BORDER         (64),
+       .V_BORDER         (16),
+       .H_FRONT_PORCH    (16),
+       .H_SYNC_WIDTH     (96),
+       .V_FRONT_PORCH    (10),
+       .V_SYNC_WIDTH      (2),
+       .V_LINES_PER_CHAR (28),
+       .H_SCALE           (1),
+       .V_SCALE           (1)
+       )
+   vga_video
+     (
+      .cpu_clk(cpu_clk),
+      .cpu_clken(cpu_clken && cpu_AB[15:9] == 7'b0000001),
+      .cpu_data({ graphics, cpu_DO}),
+      .cpu_addr(cpu_AB[8:0]),
+      .cpu_we(cpu_WE),
+      .vid_clk(vga_clk),
+      .vid_r(vga_r),
+      .vid_g(vga_g),
+      .vid_b(vga_b),
+      .vid_vs(vga_vs),
+      .vid_hs(vga_hs),
+      .vid_cs()
+    );
 
-   reg [8:0] video_addr = 9'b0;
-   reg [8:0] video_byte;
-   reg       video_bit;
-   reg       video_out;
-   reg [4:0] line_counter;
-   reg       gr1;
+   // ===============================================================
+   // Composite Video
+   // ===============================================================
 
-`define VGA
+   // 384 x 312 with a 320x288 active region and 256x256 centred within that
 
-`ifdef VGA
-   // VGA:
-   //    800 x 525 with a 640x480 active region and 512x488 centred within that
-   //
-   wire vid_clk = vga_clk;
- `define H_TOTAL         800
- `define V_TOTAL         525
- `define H_ACTIVE        640
- `define V_ACTIVE        480
- `define H_BORDER         64
- `define V_BORDER         16
- `define H_FRONT_PORCH    16
- `define H_SYNC_WIDTH     96
- `define V_FRONT_PORCH    10
- `define V_SYNC_WIDTH      2
- `define V_LINES_PER_CHAR 28
- `define H_SCALE           1
- `define V_SCALE           1
-`else
-   // Composite:
-   //    384 x 312 with a 320x288 active region and 256x256 centred within that
-   wire vid_clk = cpu_clk;
- `define H_TOTAL         384
- `define V_TOTAL         312
- `define H_ACTIVE        320
- `define V_ACTIVE        288
- `define H_BORDER         32
- `define V_BORDER         16
- `define H_FRONT_PORCH    10
- `define H_SYNC_WIDTH     28
- `define V_FRONT_PORCH     4
- `define V_SYNC_WIDTH      2
- `define V_LINES_PER_CHAR 16
- `define H_SCALE           0
- `define V_SCALE           0
-`endif
-
-   always @(posedge vid_clk) begin
-
-      if (h_counter == `H_TOTAL - 1) begin
-         h_counter <= 10'b0;
-         if (v_counter == `V_TOTAL - 1) begin
-            v_counter <= 10'b0;
-         end else begin
-            v_counter <= v_counter + 1'b1;
-         end
-      end else begin
-         h_counter <= h_counter + 1'b1;
-      end
-
-      if (h_counter == `H_ACTIVE + `H_FRONT_PORCH) begin
-         h_sync <= 1'b1;
-      end else if (h_counter == `H_ACTIVE + `H_FRONT_PORCH + `H_SYNC_WIDTH) begin
-         h_sync <= 1'b0;
-      end
-
-      if (v_counter == `V_ACTIVE + `V_FRONT_PORCH) begin
-         v_sync <= 1'b1;
-      end else if (v_counter == `V_ACTIVE + `V_FRONT_PORCH + `V_SYNC_WIDTH) begin
-         v_sync <= 1'b0;
-      end
-
-      // VGA:
-      //   32 * 16 = 512 => 64 + 512 + 64 => 640
-      //   16 * 28 = 448 => 16 + 448 + 16 => 480
-
-      if (h_counter == `H_BORDER - 1) begin
-         video_addr[4:0] <= 5'b0;
-      end else if (&h_counter[2 + `H_SCALE:0]) begin
-         video_addr[4:0] <= video_addr[4:0] + 1'b1;
-      end
-
-      if (h_counter == 0) begin
-         if (v_counter == `V_BORDER) begin
-            line_counter <= 5'b0;
-            video_addr[8:5] <= 5'b0;
-         end else if (line_counter == `V_LINES_PER_CHAR - 1) begin
-            line_counter <= 5'b0;
-            video_addr[8:5] <= video_addr[8:5] + 1'b1;
-         end else begin
-            line_counter <= line_counter + 1'b1;
-         end
-      end
-
-      video_byte <= ram[{4'b0001, video_addr}];
-
-      h_counter1 <= h_counter[3:0];
-
-      if (video_byte[8]) begin
-         // Chunky graphics Mode
-         // 0 1 lines 0-6
-         // 2 3 lines 7-13
-         // 4 5 lines 14-20
-         // 6 7 lines 21-27
-         if (line_counter < `V_LINES_PER_CHAR * 1 / 4)
-           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[1] : video_byte[0];
-         else if (line_counter < `V_LINES_PER_CHAR * 2 / 4)
-           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[3] : video_byte[2];
-         else if (line_counter < `V_LINES_PER_CHAR * 3 / 4)
-           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[5] : video_byte[4];
-         else
-           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[7] : video_byte[6];
-      end else begin
-         // Text Mode
-         video_bit <= char_rom[{video_byte[6:0], line_counter[`V_SCALE + 3 : `V_SCALE]}][h_counter1[`H_SCALE + 2 : `H_SCALE] ^ 3'b111];
-      end
-      if (v_counter >= `V_BORDER && v_counter < `V_ACTIVE - `V_BORDER  && h_counter >= `H_BORDER + 2 && h_counter < `H_ACTIVE - `H_BORDER + 2) begin
-        vga_r <= video_bit;
-        vga_g <= video_bit;
-        vga_b <= video_bit;
-        composite_video <= video_bit;
-      end else begin
-        vga_r <= 1'b0;
-        vga_g <= 1'b0;
-        vga_b <= 1'b0;
-        composite_video <= 1'b0;
-      end
-   vga_hs <= !h_sync;
-   vga_vs <= !v_sync;
-   composite_sync <= !(h_sync ^ v_sync);
-   end
+   lores_video
+     #(
+       .H_TOTAL         (384),
+       .V_TOTAL         (312),
+       .H_ACTIVE        (320),
+       .V_ACTIVE        (288),
+       .H_BORDER         (32),
+       .V_BORDER         (16),
+       .H_FRONT_PORCH    (10),
+       .H_SYNC_WIDTH     (28),
+       .V_FRONT_PORCH     (4),
+       .V_SYNC_WIDTH      (2),
+       .V_LINES_PER_CHAR (16),
+       .H_SCALE           (0),
+       .V_SCALE           (0)
+       )
+   comp_video
+     (
+      .cpu_clk(cpu_clk),
+      .cpu_clken(cpu_clken && cpu_AB[15:9] == 7'b0000001),
+      .cpu_data({ graphics, cpu_DO}),
+      .cpu_addr(cpu_AB[8:0]),
+      .cpu_we(cpu_WE),
+      .vid_clk(cpu_clk),
+      .vid_r(),
+      .vid_g(composite_video),
+      .vid_b(),
+      .vid_vs(),
+      .vid_hs(),
+      .vid_cs(composite_sync)
+    );
 
    // ===============================================================
    // CPU
