@@ -52,3 +52,7 @@ NET "kdi<4>"     LOC = "P98"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 
 
 # PWM Audio
 NET "pwm_audio"  LOC = "P85"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;
+
+# Test
+NET "composite_sync"  LOC = "P40"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;
+NET "composite_video"  LOC = "P43"  | IOSTANDARD = LVCMOS33 | SLEW = SLOW | DRIVE = 8 ;

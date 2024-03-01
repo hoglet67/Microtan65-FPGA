@@ -33,7 +33,9 @@ module microtan
    output reg    vga_g,
    output reg    vga_b,
    output [4:0]  kdi,
-   output        pwm_audio
+   output        pwm_audio,
+   output reg    composite_sync,
+   output reg    composite_video
  );
 
    wire        cpu_clk;
@@ -45,7 +47,7 @@ module microtan
    wire        cpu_WE_next;
    reg         cpu_WE;
    wire        cpu_SYNC;
-	wire        reset_out;
+   wire        reset_out;
 
    reg [2:0]   clken_counter = 4'b0;
    reg         cpu_clken = 1'b0;
@@ -99,7 +101,7 @@ module microtan
       .PSCLK            (1'b0),
       .CLKFX            (cpu_clk),
       .CLKFX180         (),
-      .CLKDV            (vid_clk),
+      .CLKDV            (vga_clk),
       .CLK2X            (),
       .CLK2X180         (),
       .CLK0             (clk0),
@@ -210,7 +212,7 @@ module microtan
       .col(key_col),
       .row(key_row),
       .key_int(key_int),
-		.reset_out(reset_out),
+      .reset_out(reset_out),
       .joystick(joystick_DO)
       );
 
@@ -263,8 +265,6 @@ module microtan
    // video
    // ===============================================================
 
-   // 640 x 480
-   // 800 x 525
 
    reg [9:0] h_counter = 10'b0;
    reg [3:0] h_counter1 = 4'b0;
@@ -277,13 +277,52 @@ module microtan
    reg       video_bit;
    reg       video_out;
    reg [4:0] line_counter;
-	reg       gr1;
+   reg       gr1;
+
+`define VGA
+
+`ifdef VGA
+   // VGA:
+   //    800 x 525 with a 640x480 active region and 512x488 centred within that
+   //
+   wire vid_clk = vga_clk;
+ `define H_TOTAL         800
+ `define V_TOTAL         525
+ `define H_ACTIVE        640
+ `define V_ACTIVE        480
+ `define H_BORDER         64
+ `define V_BORDER         16
+ `define H_FRONT_PORCH    16
+ `define H_SYNC_WIDTH     96
+ `define V_FRONT_PORCH    10
+ `define V_SYNC_WIDTH      2
+ `define V_LINES_PER_CHAR 28
+ `define H_SCALE           1
+ `define V_SCALE           1
+`else
+   // Composite:
+   //    384 x 312 with a 320x288 active region and 256x256 centred within that
+   wire vid_clk = cpu_clk;
+ `define H_TOTAL         384
+ `define V_TOTAL         312
+ `define H_ACTIVE        320
+ `define V_ACTIVE        288
+ `define H_BORDER         32
+ `define V_BORDER         16
+ `define H_FRONT_PORCH    10
+ `define H_SYNC_WIDTH     28
+ `define V_FRONT_PORCH     4
+ `define V_SYNC_WIDTH      2
+ `define V_LINES_PER_CHAR 16
+ `define H_SCALE           0
+ `define V_SCALE           0
+`endif
 
    always @(posedge vid_clk) begin
 
-      if (h_counter == 799) begin
+      if (h_counter == `H_TOTAL - 1) begin
          h_counter <= 10'b0;
-         if (v_counter == 524) begin
+         if (v_counter == `V_TOTAL - 1) begin
             v_counter <= 10'b0;
          end else begin
             v_counter <= v_counter + 1'b1;
@@ -292,31 +331,33 @@ module microtan
          h_counter <= h_counter + 1'b1;
       end
 
-      if (h_counter == 640 + 16) begin
+      if (h_counter == `H_ACTIVE + `H_FRONT_PORCH) begin
          h_sync <= 1'b1;
-      end else if (h_counter == 640 + 16 + 96) begin
+      end else if (h_counter == `H_ACTIVE + `H_FRONT_PORCH + `H_SYNC_WIDTH) begin
          h_sync <= 1'b0;
       end
 
-      if (v_counter == 480 + 10) begin
+      if (v_counter == `V_ACTIVE + `V_FRONT_PORCH) begin
          v_sync <= 1'b1;
-      end else if (v_counter == 480 + 10 + 2) begin
+      end else if (v_counter == `V_ACTIVE + `V_FRONT_PORCH + `V_SYNC_WIDTH) begin
          v_sync <= 1'b0;
       end
 
-      // 32 * 16 = 512 => 64 + 512 + 64 => 640
-      // 16 * 28 = 448 => 16 + 448 + 16 => 480
-      if (h_counter == 63) begin
+      // VGA:
+      //   32 * 16 = 512 => 64 + 512 + 64 => 640
+      //   16 * 28 = 448 => 16 + 448 + 16 => 480
+
+      if (h_counter == `H_BORDER - 1) begin
          video_addr[4:0] <= 5'b0;
-      end else if (h_counter[3:0] == 4'b1111) begin
+      end else if (&h_counter[2 + `H_SCALE:0]) begin
          video_addr[4:0] <= video_addr[4:0] + 1'b1;
       end
 
       if (h_counter == 0) begin
-         if (v_counter == 16) begin
+         if (v_counter == `V_BORDER) begin
             line_counter <= 5'b0;
             video_addr[8:5] <= 5'b0;
-         end else if (line_counter == 27) begin
+         end else if (line_counter == `V_LINES_PER_CHAR - 1) begin
             line_counter <= 5'b0;
             video_addr[8:5] <= video_addr[8:5] + 1'b1;
          end else begin
@@ -334,29 +375,32 @@ module microtan
          // 2 3 lines 7-13
          // 4 5 lines 14-20
          // 6 7 lines 21-27
-         if (line_counter < 7)
-           video_bit <= h_counter1[3] ? video_byte[1] : video_byte[0];
-         else if (line_counter < 14)
-           video_bit <= h_counter1[3] ? video_byte[3] : video_byte[2];
-         else if (line_counter < 21)
-           video_bit <= h_counter1[3] ? video_byte[5] : video_byte[4];
+         if (line_counter < `V_LINES_PER_CHAR * 1 / 4)
+           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[1] : video_byte[0];
+         else if (line_counter < `V_LINES_PER_CHAR * 2 / 4)
+           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[3] : video_byte[2];
+         else if (line_counter < `V_LINES_PER_CHAR * 3 / 4)
+           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[5] : video_byte[4];
          else
-           video_bit <= h_counter1[3] ? video_byte[7] : video_byte[6];
+           video_bit <= h_counter1[`H_SCALE + 2] ? video_byte[7] : video_byte[6];
       end else begin
          // Text Mode
-         video_bit <= char_rom[{video_byte[6:0], line_counter[4:1]}][h_counter1[3:1] ^ 3'b111];
-      end // else: !if(video_byte[8])
-      vga_hs <= !h_sync;
-      vga_vs <= !v_sync;
-      if (v_counter >= 16 && v_counter < 16 + 448 && h_counter >= 64 + 2 && h_counter < 64 + 512 + 2) begin
+         video_bit <= char_rom[{video_byte[6:0], line_counter[`V_SCALE + 3 : `V_SCALE]}][h_counter1[`H_SCALE + 2 : `H_SCALE] ^ 3'b111];
+      end
+      if (v_counter >= `V_BORDER && v_counter < `V_ACTIVE - `V_BORDER  && h_counter >= `H_BORDER + 2 && h_counter < `H_ACTIVE - `H_BORDER + 2) begin
         vga_r <= video_bit;
         vga_g <= video_bit;
         vga_b <= video_bit;
+        composite_video <= video_bit;
       end else begin
         vga_r <= 1'b0;
         vga_g <= 1'b0;
         vga_b <= 1'b0;
+        composite_video <= 1'b0;
       end
+   vga_hs <= !h_sync;
+   vga_vs <= !v_sync;
+   composite_sync <= !(h_sync ^ v_sync);
    end
 
    // ===============================================================
@@ -366,7 +410,7 @@ module microtan
    wire [7:0]  cpu_DI = ram_sel ? ram_DO :
                rom_sel ? rom_DO :
                bff3_sel ? {key_int_flag, key_row} :
-					sound_sel1 ? sound_DO :
+               sound_sel1 ? sound_DO :
                bfc1_sel ? joystick_DO :
                8'hFF;
 
